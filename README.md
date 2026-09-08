@@ -1,56 +1,36 @@
 # ArsiShell
 
-ArsiShell is a cross-platform command-line shell and lightweight process manager implemented in C++17. Designed as an educational systems programming project for Master's study in Computer Science, it demonstrates core Operating Systems concepts including process lifecycles, inter-process communication (IPC) via pipes, I/O redirection, asynchronous background execution, and job control.
+ArsiShell is a small command-line shell and process manager written in C++17. I built it to understand how shells create processes, connect programs with pipes, redirect input and output, run commands in the background, and keep track of jobs. It runs interactively from a terminal and focuses on practical operating systems concepts.
 
 ## Why I Built It
 
-Most computer science students encounter operating systems concepts purely in textbooks. I built ArsiShell to bridge theoretical concepts with concrete implementation. By developing a functional shell from scratch without third-party frameworks, I explored:
-
-- How kernels create, isolate, and synchronize processes
-- How anonymous pipes transfer byte streams between decoupled programs
-- How file descriptors and kernel object handles redirect standard I/O streams
-- How shells track asynchronous background execution and prevent zombie processes
-- How to design clean, leak-free resource management across disparate kernel architectures (Win32 vs. POSIX)
+While studying Operating Systems, I learned about processes, inter-process communication, synchronization, and file I/O. I wanted to implement these ideas in real code instead of only learning the theory. Building a small shell was a direct way to see how an operating system kernel works with user programs.
 
 ## Features
 
-- **Interactive REPL:** Clean prompt (`ArsiShell> `) with input normalization and error handling.
-- **Robust Command Parsing:**
-  - Handles variable whitespace, tabs, and empty inputs safely.
-  - Supports single quotes (`'...'`) and double quotes (`"..."`) with escape support.
-  - Recognizes shell operators (`<`, `>`, `>>`, `|`, `&`) with or without adjacent spaces.
-  - Preserves operators inside quotes as literal characters (e.g., `echo "A | B"` prints `A | B`).
-- **Built-in Commands:**
-  - `cd [dir]` ¡ª Changes working directory (supports quoted paths; defaults to user home).
-  - `pwd` ¡ª Prints the current working directory.
-  - `echo [args...]` ¡ª Prints arguments separated by spaces.
-  - `history` ¡ª Displays numbered command history.
-  - `jobs` ¡ª Lists active and recently completed background jobs.
-  - `kill %id` / `kill id` ¡ª Terminates all processes belonging to a tracked job.
-  - `fg %id` / `fg id` ¡ª Brings a background job to the foreground and waits for completion.
-  - `bg %id` / `bg id` ¡ª Queries or resumes background job state.
-  - `clear` ¡ª Clears terminal display buffer across Windows and POSIX.
-  - `help` ¡ª Displays command documentation and supported syntax.
-  - `exit` ¡ª Reaps active handles and exits cleanly.
-- **Command History Expansion:**
-  - `!!` ¡ª Repeats the previous command.
-  - `!n` ¡ª Re-executes the $n$-th command from history.
-  - Persistent storage in `~/.arsishell_history` capped at 1,000 entries.
-- **Input and Output Redirection:**
-  - `<` ¡ª Redirects standard input from a file.
-  - `>` ¡ª Redirects standard output to a file (creates or truncates).
-  - `>>` ¡ª Appends standard output to a file.
-- **Multi-Stage Pipelines:**
-  - Arbitrary pipe chains: `command1 | command2 | command3 ...`
-  - Proper pipe inheritance and immediate closure of parent write handles to prevent reader deadlocks.
-- **Process & Job Management:**
-  - Background execution with `&`.
-  - Deterministic sequential job IDs (`[1]`, `[2]`, `[3]...`).
-  - Entire pipelines tracked as **one single job** with multiple constituent PIDs.
-  - Non-blocking asynchronous reaping before prompts (`[<id>] Done <command>`).
-  - Zero process/thread handle leaks verified under 300+ stress operations.
+- `cd` - changes the current working directory
+- `pwd` - prints the current directory
+- `echo` - prints text to the screen
+- `history` - lists previously entered commands
+- `!!` - repeats the previous command
+- `!n` - repeats command number n from history
+- `clear` - clears the terminal screen
+- `help` - shows built-in commands and usage
+- `exit` - exits the shell cleanly
+- quoted arguments - supports single quotes (`'...'`) and double quotes (`"..."`)
+- `<` - redirects standard input from a file
+- `>` - redirects standard output to a file (overwrites)
+- `>>` - appends standard output to a file
+- single and multi-stage pipes - connects commands with `|`
+- background execution with `&` - runs commands without blocking the prompt
+- `jobs` - shows currently running background jobs
+- `fg` - brings a background job to the foreground
+- `bg` - checks status of background jobs
+- `kill` - stops a running background job
+- persistent history - saves command history across sessions
+- job IDs and OS PIDs - tracks jobs using both shell job numbers (`[1]`, `[2]`) and operating system process IDs
 
-## Example Session
+## Example
 
 ```text
 ArsiShell> pwd
@@ -60,8 +40,6 @@ ArsiShell> echo "Operating Systems" | findstr Systems
 Operating Systems
 
 ArsiShell> hostname > machine.txt
-ArsiShell> type machine.txt
-DESKTOP-LEGION
 
 ArsiShell> tests\test_helper.exe 3000 &
 [1] 14220
@@ -71,166 +49,110 @@ ArsiShell> jobs
 
 ArsiShell> fg %1
 tests\test_helper.exe 3000
-(blocks for 3 seconds...)
-
-ArsiShell> tests\test_helper.exe 4000 | tests\test_helper.exe 4000 &
-[2] PIDs 15104, 16820
-
-ArsiShell> kill %2
-[2] terminated
-
-ArsiShell> history
-1  pwd
-2  echo "Operating Systems" | findstr Systems
-3  hostname > machine.txt
-4  type machine.txt
-5  tests\test_helper.exe 3000 &
-6  jobs
-7  fg %1
-8  tests\test_helper.exe 4000 | tests\test_helper.exe 4000 &
-9  kill %2
-10 history
 
 ArsiShell> exit
 ```
 
-## Architecture
+## How It Works
 
-Data flows through dedicated processing stages:
+```mermaid
+flowchart TD
+    A[User Input] --> B[History Expansion]
+    B --> C[Tokenizer]
+    C --> D[Background Parser]
+    D --> E[Pipeline Parser]
+    E --> F[Redirection Parser]
+    F --> G{Execution}
 
-```text
-               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-               ©¦   User Input String   ©¦
-               ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-                          ©¦
-                          ¨‹
-               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-               ©¦   History Expansion   ©¦ (Expands !! and !n)
-               ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-                          ©¦
-                          ¨‹
-               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-               ©¦    Lexical Scanner    ©¦ (Extracts tokens, quotes, operators)
-               ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-                          ©¦
-                          ¨‹
-               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-               ©¦   Background Parser   ©¦ (Extracts terminal '&')
-               ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-                          ©¦
-                          ¨‹
-               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-               ©¦    Pipeline Parser    ©¦ (Splits on '|' into PipelineStages)
-               ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-                          ©¦
-                          ¨‹
-               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-               ©¦  Redirection Parser   ©¦ (Extracts '<', '>', '>>')
-               ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-                          ©¦
-                          ¨‹
-               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-               ©¦ Execution Dispatcher  ©¦
-               ©¸©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¼
-                     ©¦           ©¦
-         (Built-in)  ¨‹           ¨‹  (External)
-        ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´       ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-        ©¦ In-Process   ©¦       ©¦ Process / Job Manager  ©¦
-        ©¦ Built-in API ©¦       ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-        ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼                   ©¦
-                               ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ø©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-                               ¨‹                       ¨‹
-                        Windows APIs              POSIX APIs
-                        CreateProcessA            fork() / execvp()
-                        CreatePipe                pipe() / dup2()
-                        TerminateProcess          kill()
+    G --> H[Built-in Commands]
+    G --> I[External Processes]
+
+    I --> J{Platform}
+    J --> K[Windows / Win32]
+    J --> L[POSIX]
+
+    K --> K1[CreateProcessA]
+    K --> K2[CreatePipe]
+    K --> K3[STARTUPINFO Handles]
+    K --> K4[WaitForSingleObject]
+
+    L --> L1[fork + execvp]
+    L --> L2[pipe]
+    L --> L3[dup2]
+    L --> L4[waitpid]
 ```
 
-## Operating Systems Concepts Demonstrated
+## OS Concepts Used
 
-### 1. Process Creation & Isolation
-- **Windows:** Process creation is explicit via `CreateProcessA()`, returning process and primary thread handles. The child process receives its own virtual address space, handle table, and environment block.
-- **POSIX:** Process creation uses `fork()` (copying address space and descriptor tables via copy-on-write) followed by `execvp()` to load the new executable image.
-- **In-Process vs. Out-of-Process:** Built-ins like `cd` must execute within the shell's process address space; executing `cd` in a child process would alter the child's working directory and leave the parent shell unchanged.
+- **Processes:** Every external program runs as a child process with its own memory space and resources.
+- **Parent and Child Process Behavior:** Built-in commands like `cd` must run directly inside the shell process because a child process cannot change the parent shell's working directory. External programs run as child processes.
+- **IPC with Pipes:** Anonymous pipes pass output from one program directly into the input of another. The shell must close unused write ends of pipes so the reading program receives an end-of-file signal instead of waiting forever.
+- **Stdin and Stdout Redirection:** The shell can connect standard input and output to files instead of the terminal. Windows and POSIX use different APIs to do this.
+- **Foreground vs Background Execution:** Foreground commands make the shell wait until the child finishes. Adding `&` runs the command in the background, so the shell prints a new prompt right away.
+- **Job IDs vs OS PIDs:** The shell assigns simple numbers like `[1]` and `[2]` to track user jobs, while the operating system uses its own process IDs (PIDs). A pipeline job can contain multiple PIDs under one job ID.
+- **Non-blocking Cleanup:** Before showing each prompt, the shell checks if any background processes have finished. If they are done, it cleans them up and prints a message without freezing the terminal.
+- **Resource and Handle Cleanup:** Process, thread, and pipe handles are closed when they are no longer needed, so the shell does not keep OS resources open unnecessarily.
 
-### 2. Inter-Process Communication (IPC) via Pipes
-- A pipeline connects the standard output of upstream process $i$ to the standard input of downstream process $i+1$ using anonymous byte streams.
-- **The EOF Problem & Deadlock Avoidance:** If the parent shell retains open write handles to a pipe, downstream reading processes never receive End-Of-File (EOF) and hang indefinitely waiting for input. ArsiShell explicitly closes its write handles immediately after launching each child stage.
-- **Inheritance Control:** Pipe read/write handles are selectively marked inheritable via `SetHandleInformation()` only for the specific child process using them, preventing handle leakage into unrelated child processes.
+## Windows and POSIX
 
-### 3. I/O Redirection & Handle Duplication
-- Uses Win32 `STARTF_USESTDHANDLES` to inject custom `HANDLE` values into `si.hStdInput` and `si.hStdOutput`.
-- On POSIX, uses `dup2(fd, STDIN_FILENO)` and `dup2(fd, STDOUT_FILENO)` in the child process before `execvp()`.
-- File creation flags strictly distinguish between truncation (`CREATE_ALWAYS` / `O_TRUNC`) for `>` and appending (`OPEN_ALWAYS` / `O_APPEND`) for `>>`.
+| Task           | Windows                        | POSIX                   |
+| -------------- | ------------------------------ | ----------------------- |
+| Create process | `CreateProcessA`               | `fork()` + `execvp()`   |
+| Pipe           | `CreatePipe`                   | `pipe()`                |
+| Redirection    | `STARTUPINFO` standard handles | `dup2()`                |
+| Wait           | `WaitForSingleObject`          | `waitpid()`             |
+| Terminate      | `TerminateProcess`             | `kill(..., SIGTERM)`    |
+| Cleanup        | `CloseHandle`                  | `close()` / `waitpid()` |
 
-### 4. Asynchronous Background Execution & Zombie Prevention
-- Appending `&` causes the shell to launch child processes without blocking on foreground wait.
-- **Non-blocking Reaping:** Before presenting each prompt, `check_background_jobs()` polls active jobs using non-blocking primitives (`WaitForSingleObject(hProcess, 0)` on Windows; `waitpid(pid, &status, WNOHANG)` on POSIX). Completed processes are reaped promptly, preventing resource leaks and zombie processes.
+Platform status: ArsiShell has been tested on Windows 11. A POSIX implementation is also included, but I have not yet tested it in a Linux environment.
 
-### 5. Job Control & Job Table Abstraction
-- The shell maintains an internal job table mapping human-readable, deterministic sequential IDs (`[1]`, `[2]`, `[3]`) to underlying OS PIDs.
-- A multi-stage background pipeline (e.g. `cmd1 | cmd2 &`) is represented as **one cohesive job**. Foregrounding (`fg`) waits on all constituent processes; termination (`kill`) signals all running processes in the pipeline.
+## Build
 
-## Windows vs. POSIX Implementation Details
+Prerequisite:
 
-| Mechanism | Windows Implementation | POSIX Implementation |
-| :--- | :--- | :--- |
-| **Process Spawning** | `CreateProcessA()` | `fork()` + `execvp()` |
-| **Anonymous Pipes** | `CreatePipe()` | `pipe()` |
-| **Handle Inheritance** | `SetHandleInformation(h, HANDLE_FLAG_INHERIT, ...)` | Handled implicitly during `fork()` |
-| **Standard Stream Redirection** | `STARTUPINFOA.hStdInput / hStdOutput` | `dup2(fd, STDIN_FILENO / STDOUT_FILENO)` |
-| **Non-blocking Polling** | `WaitForSingleObject(hProcess, 0) == WAIT_OBJECT_0` | `waitpid(pid, &status, WNOHANG)` |
-| **Foreground Waiting** | `WaitForSingleObject(hProcess, INFINITE)` | `waitpid(pid, &status, 0)` |
-| **Process Termination** | `TerminateProcess(hProcess, 1)` | `kill(pid, SIGTERM)` |
-| **Job Suspension / Resume** | Not natively supported for console jobs | `kill(pid, SIGSTOP)` / `kill(pid, SIGCONT)` |
-| **Handle Cleanup** | `CloseHandle()` on process and thread handles | `close()` on descriptors; kernel reaps on `waitpid()` |
+A C++17-compatible compiler.
 
-> [!NOTE]
-> **POSIX Runtime Validation Status:**
-> POSIX implementation is included but runtime validation was not performed because a Linux execution environment was unavailable during development.
+Direct build command:
 
-## Building
-
-### Prerequisites
-- C++17 compatible compiler (MinGW-w64 GCC 9+, Clang 10+, or MSVC 2019+)
-- CMake 3.15+ (optional, for CMake builds)
-- Ninja (optional)
-
-### Build Option 1: Direct GCC Compilation
 ```bash
 g++ -std=c++17 -Wall -Wextra -Wpedantic src/main.cpp src/shell.cpp -o ArsiShell.exe
 ```
 
-### Build Option 2: CMake with Ninja
+Build with CMake and Ninja:
+
 ```bash
 cmake -S . -B build -G Ninja
 cmake --build build
 ```
 
-## Running Tests
+## Tests
 
-An automated regression test suite and Win32 kernel handle stress test are included in `tests/`:
+The automated test suite contains 40 assertions. All 40 passed during the final Windows test run.
+
+During a Windows stress test with 325 process, pipe, redirection, and background-job operations, the ArsiShell process returned to the same steady-state handle count after the test.
+
+Run the tests:
 
 ```bash
-# Run comprehensive functional regression tests (40 test assertions)
 python tests/run_tests.py
-
-# Run Win32 kernel handle leak verification (measures handles before and after 325 operations)
 python tests/verify_handles.py
 ```
 
-## Current Limitations
+## Limitations
 
-- **No Command Chaining:** Logical conditional operators (`&&`, `||`) and command separators (`;`) are not implemented.
-- **No Signal-Based Job Suspension on Windows:** Win32 does not provide POSIX `SIGSTOP`/`SIGCONT` semantics. `bg` on Windows reports whether a job is already executing in the background.
-- **No Interactive Line Editing:** Tab auto-completion, interactive arrow-key history navigation (readline/ncurses), and environment variable expansion (`$VAR`) are omitted to keep the focus on OS process and IPC primitives.
+- no `&&`, `||`, or `;`
+- no tab completion
+- no arrow-key history navigation
+- no environment-variable expansion
+- Windows does not provide POSIX-style `SIGSTOP` / `SIGCONT` job control
 
-## Learning Outcomes
+## What I Learned
 
-1. **Kernel Object Lifecycles:** Gained hands-on experience tracking process and thread handles, ensuring every opened handle is closed exactly once across success and error paths.
-2. **IPC Mechanics:** Mastered anonymous pipe creation, inheritance flags, and EOF propagation to avoid deadlock conditions.
-3. **Cross-Platform Systems Programming:** Learned how process creation paradigms fundamentally differ between Windows (`CreateProcess`) and UNIX (`fork`/`exec`), and how to write clean, portable C++ code without third-party dependencies.
-4. **Defensive Systems Design:** Learned how to safely validate user input, guard against malformed pipes, and restrict process termination exclusively to tracked jobs.
+- I learned why unused pipe handles must be closed.
+- I learned how a shell can check background processes without blocking.
+- I learned why `cd` needs to run inside the shell process.
+- I learned how Windows and POSIX use different APIs for similar process-management tasks.
+- I learned why cleanup matters when working directly with OS handles.
 
 ## License
 

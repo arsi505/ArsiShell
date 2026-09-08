@@ -39,40 +39,20 @@ graph TD
 
 The interactive Read-Eval-Print Loop is implemented in `run_shell()` (`src/shell.cpp`):
 
-```text
-       ©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´
-       ©¦                   REPL Loop Iteration                  ©¦
-       ©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼
-                                   ©¦
-                                   ¨‹
-        1. check_background_jobs() [Non-blocking reap & cleanup]
-                                   ©¦
-                                   ¨‹
-        2. Render Prompt           [ArsiShell> ]
-                                   ©¦
-                                   ¨‹
-        3. Read Line               [std::getline from std::cin]
-                                   ©¦
-                                   ¨‹
-        4. expand_history()        [Resolve !! and !n macros]
-                                   ©¦
-                                   ¨‹
-        5. tokenize()              [Lexical scan & quote parsing]
-                                   ©¦
-                                   ¨‹
-        6. add_to_history()        [Append expanded line to history]
-                                   ©¦
-                                   ¨‹
-        7. parse_background()      [Detect and strip terminal '&']
-                                   ©¦
-                                   ¨‹
-        8. parse_pipeline()        [Split on '|' into PipelineStages]
-                                   ©¦
-                                   ¨‹
-        9. execute_pipeline()      [Execute built-in or child processes]
-                                   ©¦
-                                   ¨‹
-       10. Repeat until 'exit' or EOF (Ctrl+D / Ctrl+Z)
+```mermaid
+flowchart TD
+    Start([REPL Loop Iteration]) --> Step1["1. check_background_jobs()<br/>(Non-blocking reap & cleanup)"]
+    Step1 --> Step2["2. Render Prompt<br/>(ArsiShell&gt; )"]
+    Step2 --> Step3["3. Read Line<br/>(std::getline from std::cin)"]
+    Step3 --> Step4["4. expand_history()<br/>(Resolve !! and !n macros)"]
+    Step4 --> Step5["5. tokenize()<br/>(Lexical scan & quote parsing)"]
+    Step5 --> Step6["6. add_to_history()<br/>(Append expanded line to history)"]
+    Step6 --> Step7["7. parse_background()<br/>(Detect and strip terminal '&')"]
+    Step7 --> Step8["8. parse_pipeline()<br/>(Split on '|' into PipelineStages)"]
+    Step8 --> Step9["9. execute_pipeline()<br/>(Execute built-in or child processes)"]
+    Step9 --> Step10{"Exit command<br/>or EOF?"}
+    Step10 -->|No| Step1
+    Step10 -->|Yes| EndNode([Exit Shell])
 ```
 
 ### Key Invariant: Reaping Before Prompt
@@ -86,8 +66,8 @@ Command line processing is divided into distinct, decoupled phases:
 
 ### Phase 1: History Expansion (`expand_history`)
 Before lexical tokenization, the raw line is checked for history operators:
-- `!!` ¡ª replaced with the most recent command in `g_history`.
-- `!n` ¡ª replaced with the $n$-th 1-based command in `g_history`.
+- `!!` â€” replaced with the most recent command in `g_history`.
+- `!n` â€” replaced with the $n$-th 1-based command in `g_history`.
 The expanded string is echoed to `std::cout` (matching standard UNIX shell semantics) and then fed into the parser.
 
 ### Phase 2: Lexical Tokenization (`tokenize`)
@@ -175,7 +155,7 @@ POSIX separates process creation from executable loading:
 ### The Classical Pipe Deadlock Problem
 In a multi-stage pipeline:
 $$\text{Stage}_1 \xrightarrow{\text{Pipe}_1} \text{Stage}_2 \xrightarrow{\text{Pipe}_2} \dots \xrightarrow{\text{Pipe}_{N-1}} \text{Stage}_N$$
-- Kernel pipe buffers have a finite capacity (typically 4KB¨C64KB).
+- Kernel pipe buffers have a finite capacity (typically 4KBâ€“64KB).
 - $\text{Stage}_2$ will read until it encounters End-Of-File (EOF).
 - **The kernel generates EOF on a pipe ONLY when ALL write handles referencing that pipe are closed.**
 - If the parent shell fails to close its own write handle (`pipes[i].hWrite`), the reference count never drops to zero. Even after $\text{Stage}_1$ terminates, $\text{Stage}_2$ will block forever in a read wait, creating a pipeline deadlock.
@@ -187,7 +167,7 @@ $$\text{Stage}_1 \xrightarrow{\text{Pipe}_1} \text{Stage}_2 \xrightarrow{\text{P
    - `CreateProcessA` is called.
    - **Immediately after spawning stage $i$, the parent closes its copy of `pipes[i].hWrite`.**
    - **Immediately after spawning stage $i+1$, the parent closes its copy of `pipes[i].hRead`.**
-3. **RAII Safety Guard (`PipeCleanupGuard`):** A stack-allocated guard guarantees that if any stage fails to launch, all pipe handles in the vector are safely closed, preventing resource leaks.
+3. **RAII Safety Guard (`PipeCleanupGuard`):** A stack-allocated guard ensures that if any stage fails to launch, all pipe handles in the vector are safely closed, preventing resource leaks.
 
 ---
 
@@ -244,7 +224,7 @@ When all processes in the job have terminated:
 
 ## 8. Verified Kernel Handle Safety (Windows)
 
-To provide empirical evidence for academic review, ArsiShell's process handle count was measured directly via the Windows Win32 API (`GetProcessHandleCount`):
+To verify that ArsiShell cleans up handles properly, process handle counts were measured directly using the Windows Win32 API (`GetProcessHandleCount`):
 
 ```text
 [Baseline Steady-State Handles] : 59 handles
@@ -256,7 +236,7 @@ To provide empirical evidence for academic review, ArsiShell's process handle co
 [Net Handle Leak Delta]         : 0 HANDLES
 ```
 
-### Resource Guarantee Summary
+### Resource Cleanup Summary
 - **Thread Handles:** Closed immediately after `CreateProcessA`.
 - **File Handles:** Managed via RAII guards and closed immediately upon child spawn.
 - **Pipe Handles:** Explicitly closed during pipeline progression and cleaned via `PipeCleanupGuard`.
