@@ -1,0 +1,32 @@
+# Build artifacts
+build/
+bin/
+obj/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Visual Studio / VS Code / CLion / IDEs
+.vscode/
+.vs/
+.idea/
+*.sln
+*.vcxproj*
+CMakeSettings.json
+
+# Shell history & runtime test artifacts
+.arsishell_history
+*.tmp
+*.log
+test_out*.txt
+test_bg*.txt
+reg_test*.txt
+tests/*.exe
+
+# OS generated files
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store\n
